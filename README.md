@@ -40,7 +40,7 @@ pip install -e ".[dev]"
 ### Run the Development Server
 
 ```bash
-uvicorn genai_rag_service.api.app:get_application --reload
+uvicorn app.main:app, --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Health Check
@@ -59,30 +59,27 @@ curl http://localhost:8000/tools
 
 ## Architecture
 
+This service uses a **flat layout** structure to ensure separation of concerns:
+
 ```
 genai-rag-service/
-├── src/genai_rag_service/
-│   ├── domain/           # Pure domain models (Document, Chunk, Embedding, etc.)
-│   ├── ports/            # Abstract interfaces for adapters
-│   ├── adapters/         # Concrete implementations (in-memory, Azure, etc.)
-│   ├── chunking/         # Document chunking strategies
-│   ├── services/         # Business logic (Ingestion, Retrieval)
-│   ├── tools/            # MCP tool definitions and handlers
-│   ├── api/              # FastAPI application
-│   ├── config/           # Settings and configuration
-│   └── observability/    # Logging and metrics
-└── tests/
-    ├── unit/             # Unit tests
-    └── integration/      # Integration tests
+├── app/            # FastAPI delivery layer (API, core routes, config)
+├── rag/            # Pure domain logic (Schemas, Ingestion, Retrieval)
+├── adapters/       # Infrastructure adapters (Memory, Azure AI Search, etc.)
+├── mcp_tools/      # MCP tool definitions and handlers
+├── tests/          # Test suite (Unit & Integration)
+├── Dockerfile      # Container definition
+├── pyproject.toml  # Project configuration
+└── .env.example    # Environment variable template
 ```
 
 ### Design Principles
 
 1. **Hexagonal Architecture** — Business logic isolated from infrastructure
-2. **Ports & Adapters** — External dependencies abstracted behind interfaces
-3. **Deterministic Operations** — Same input always produces same output
+2. **Ports & Adapters** — External dependencies abstracted behind interfaces in `rag/schemas.py`
+3. **Deterministic Operations** — Same input always produces same output (chunk IDs, etc.)
 4. **Idempotent Ingestion** — Re-ingesting same document is a no-op
-5. **Explicit Results** — ToolSuccess/ToolFailure over exceptions
+5. **Separation of Concerns** — API layer (`app/`) is separate from Domain (`rag/`)
 
 ---
 
@@ -99,11 +96,10 @@ Ingest documents into the RAG system.
         {
             "uri": "doc://example/intro",
             "content": "Document text content...",
-            "version": "1.0.0",
             "metadata": {"category": "tutorials"}
         }
     ],
-    "chunking_config": {
+    "chunking": {
         "strategy": "fixed_size",
         "chunk_size": 512,
         "chunk_overlap": 50
@@ -141,14 +137,13 @@ Search for relevant document chunks.
     "results": [
         {
             "chunk_id": "xyz789...",
-            "document_id": "abc123...",
             "content": "Machine learning is...",
             "score": 0.92,
-            "match_type": "vector",
+            "source_uri": "doc://example/intro",
             "metadata": {...}
         }
     ],
-    "total_results": 1,
+    "count": 1,
     "latency_ms": 45.2
 }
 ```
@@ -166,10 +161,9 @@ All settings can be configured via environment variables with the `RAG_` prefix:
 | `RAG_ENVIRONMENT` | `development` | Environment (development, staging, production) |
 | `RAG_LOG_LEVEL` | `INFO` | Log level |
 | `RAG_EMBEDDING_MODEL_ID` | `text-embedding-ada-002` | Embedding model identifier |
-| `RAG_EMBEDDING_DIMENSION` | `1536` | Embedding vector dimension |
 | `RAG_DEFAULT_CHUNK_SIZE` | `512` | Default chunk size in tokens |
-| `RAG_VECTOR_STORE_TYPE` | `memory` | Vector store type (memory, azure_search) |
-| `RAG_EMBEDDING_PROVIDER_TYPE` | `mock` | Embedding provider (mock, openai) |
+| `RAG_VECTOR_STORE_TYPE` | `memory` | Vector store type (memory, azure) |
+| `RAG_STORAGE_TYPE` | `memory` | Blob storage type (memory, azure) |
 
 Create a `.env` file for local development:
 
@@ -194,21 +188,18 @@ pytest tests/unit/ -v
 
 # Integration tests only
 pytest tests/integration/ -v
-
-# With coverage
-pytest tests/ -v --cov=src/genai_rag_service
 ```
 
 ### Type Checking
 
 ```bash
-mypy src/genai_rag_service --strict
+mypy rag adapters mcp_tools app
 ```
 
 ### Linting
 
 ```bash
-ruff check src/
+ruff check .
 ```
 
 ---
@@ -221,7 +212,6 @@ ruff check src/
 | `GET` | `/health/live` | Liveness probe |
 | `GET` | `/health/ready` | Readiness probe |
 | `GET` | `/tools` | List available tools |
-| `GET` | `/tools/{name}` | Get tool details |
 | `POST` | `/tools/invoke/{name}` | Invoke a tool |
 
 ---
@@ -233,20 +223,7 @@ This service depends on `genai-mcp-core` for:
 - `MCPContext` — Request envelope with tracing and permissions
 - `ToolDefinition` — Tool contracts
 - `ToolRegistry` — Tool discovery and invocation
-- `ToolSuccess/ToolFailure` — Explicit result types
-
-```python
-from genai_mcp_core import MCPContext, ToolRegistry
-
-# Create context with permissions
-context = MCPContext.create(
-    permissions=["rag:ingest", "rag:search"],
-    metadata={"tenant_id": "acme-corp"},
-)
-
-# Invoke tool through registry
-result = await registry.invoke("rag_search", context, {"query": "..."})
-```
+- `ToolResult` — Explicit Success/Failure return types
 
 ---
 

@@ -4,8 +4,8 @@ Integration tests for the ingestion pipeline.
 
 import pytest
 
-from genai_rag_service.chunking.config import ChunkingConfig
-from genai_rag_service.services.ingestion import DocumentInput, IngestionService
+from rag.ingestion.chunker import ChunkingConfig
+from rag.ingestion.pipeline import IngestionRequest, IngestionPipeline
 
 
 class TestIngestionPipeline:
@@ -14,11 +14,11 @@ class TestIngestionPipeline:
     @pytest.mark.asyncio
     async def test_ingest_single_document(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,  # Fixture uses new class
     ) -> None:
         """Test ingesting a single document."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/single",
                 content="""
                 Machine learning is a subset of artificial intelligence that 
@@ -26,7 +26,6 @@ class TestIngestionPipeline:
                 being explicitly programmed. It focuses on developing programs 
                 that can access data and use it to learn for themselves.
                 """.strip(),
-                version="1.0.0",
                 metadata={"category": "ml"},
             ),
         ]
@@ -39,27 +38,26 @@ class TestIngestionPipeline:
             min_chunk_size=10,
         )
         
-        result = await ingestion_service.ingest(documents, config)
+        result = await ingestion_service.run(documents, config)
         
         assert result.ingested_count == 1
         assert result.skipped_count == 0
         assert len(result.document_ids) == 1
         assert result.chunk_count > 0
-        assert not result.has_errors
+        assert not result.errors
     
     @pytest.mark.asyncio
     async def test_ingest_batch_documents(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,
         sample_documents: list[dict],
     ) -> None:
         """Test ingesting multiple documents."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri=doc["uri"],
                 content=doc["content"],
-                version=doc.get("version", "1.0.0"),
-                metadata=doc.get("metadata"),
+                metadata=doc.get("metadata", {}),
             )
             for doc in sample_documents
         ]
@@ -71,7 +69,7 @@ class TestIngestionPipeline:
             min_chunk_size=10,
         )
         
-        result = await ingestion_service.ingest(documents, config)
+        result = await ingestion_service.run(documents, config)
         
         assert result.ingested_count == len(sample_documents)
         assert len(result.document_ids) == len(sample_documents)
@@ -79,11 +77,11 @@ class TestIngestionPipeline:
     @pytest.mark.asyncio
     async def test_ingest_idempotent(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,
     ) -> None:
         """Test that ingestion is idempotent."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/idempotent",
                 content="Same content for testing idempotency in the system which needs to be long enough to chunk.",
             ),
@@ -97,23 +95,23 @@ class TestIngestionPipeline:
         )
         
         # First ingestion
-        result1 = await ingestion_service.ingest(documents, config)
+        result1 = await ingestion_service.run(documents, config)
         assert result1.ingested_count == 1
-        assert result1.chunk_count > 0  # Ensure chunks were created
+        assert result1.chunk_count > 0
         
         # Second ingestion (same document)
-        result2 = await ingestion_service.ingest(documents, config)
+        result2 = await ingestion_service.run(documents, config)
         assert result2.ingested_count == 0
         assert result2.skipped_count == 1
     
     @pytest.mark.asyncio
     async def test_ingest_with_custom_chunking(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,
     ) -> None:
         """Test ingestion with custom chunking config."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/custom-chunking",
                 content="""
                 This is a longer document that should be split into multiple 
@@ -131,7 +129,7 @@ class TestIngestionPipeline:
             min_chunk_size=30,
         )
         
-        result = await ingestion_service.ingest(documents, config)
+        result = await ingestion_service.run(documents, config)
         
         assert result.ingested_count == 1
         assert result.chunk_count > 0
@@ -143,13 +141,13 @@ class TestIngestionWithDeletion:
     @pytest.mark.asyncio
     async def test_delete_document(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,
         vector_store,  # From fixture
     ) -> None:
         """Test deleting an ingested document."""
         # Ingest a document
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/to-delete",
                 content="Content that will be deleted from the system. This needs to be long enough for chunking.",
             ),
@@ -162,9 +160,9 @@ class TestIngestionWithDeletion:
             min_chunk_size=10,
         )
         
-        result = await ingestion_service.ingest(documents, config)
+        result = await ingestion_service.run(documents, config)
         assert result.ingested_count == 1
-        assert result.chunk_count > 0  # Ensure chunks were created
+        assert result.chunk_count > 0
         document_id = result.document_ids[0]
         
         # Verify document exists

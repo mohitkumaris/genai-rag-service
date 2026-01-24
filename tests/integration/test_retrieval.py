@@ -4,10 +4,10 @@ Integration tests for the retrieval pipeline.
 
 import pytest
 
-from genai_rag_service.chunking.config import ChunkingConfig
-from genai_rag_service.domain.retrieval import SearchQuery
-from genai_rag_service.services.ingestion import DocumentInput, IngestionService
-from genai_rag_service.services.retrieval import RetrievalService
+from rag.ingestion.chunker import ChunkingConfig
+from rag.ingestion.pipeline import IngestionRequest, IngestionPipeline
+from rag.schemas import SearchQuery
+from rag.retrieval.search import SearchService
 
 
 class TestRetrievalPipeline:
@@ -16,11 +16,11 @@ class TestRetrievalPipeline:
     @pytest.fixture
     async def indexed_documents(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,  # Use IngestionPipeline
     ) -> list[str]:
         """Ingest test documents and return their IDs."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/machine-learning",
                 content="""
                 Machine learning is a type of artificial intelligence that 
@@ -31,7 +31,7 @@ class TestRetrievalPipeline:
                 """.strip(),
                 metadata={"topic": "ml"},
             ),
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/deep-learning",
                 content="""
                 Deep learning is a subset of machine learning that uses 
@@ -41,7 +41,7 @@ class TestRetrievalPipeline:
                 """.strip(),
                 metadata={"topic": "dl"},
             ),
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/nlp",
                 content="""
                 Natural language processing enables computers to understand,
@@ -60,13 +60,13 @@ class TestRetrievalPipeline:
             min_chunk_size=10,
         )
         
-        result = await ingestion_service.ingest(documents, config)
+        result = await ingestion_service.run(documents, config)
         return list(result.document_ids)
     
     @pytest.mark.asyncio
     async def test_vector_search(
         self,
-        retrieval_service: RetrievalService,
+        retrieval_service: SearchService,  # Rename to match fixture returning SearchService
         indexed_documents: list[str],
     ) -> None:
         """Test vector similarity search."""
@@ -89,7 +89,7 @@ class TestRetrievalPipeline:
     @pytest.mark.asyncio
     async def test_hybrid_search(
         self,
-        retrieval_service: RetrievalService,
+        retrieval_service: SearchService,
         indexed_documents: list[str],
     ) -> None:
         """Test hybrid (vector + keyword) search."""
@@ -109,7 +109,7 @@ class TestRetrievalPipeline:
     @pytest.mark.asyncio
     async def test_search_with_threshold(
         self,
-        retrieval_service: RetrievalService,
+        retrieval_service: SearchService,
         indexed_documents: list[str],
     ) -> None:
         """Test search with similarity threshold."""
@@ -129,7 +129,7 @@ class TestRetrievalPipeline:
     @pytest.mark.asyncio
     async def test_search_empty_index(
         self,
-        retrieval_service: RetrievalService,
+        retrieval_service: SearchService,
     ) -> None:
         """Test search on empty index."""
         query = SearchQuery(
@@ -140,7 +140,7 @@ class TestRetrievalPipeline:
         context = await retrieval_service.search(query)
         
         assert not context.has_results
-        assert context.result_count == 0
+        assert len(context.results) == 0
 
 
 class TestRetrievalMetadata:
@@ -149,16 +149,16 @@ class TestRetrievalMetadata:
     @pytest.fixture
     async def indexed_with_metadata(
         self,
-        ingestion_service: IngestionService,
+        ingestion_service: IngestionPipeline,
     ) -> None:
         """Ingest documents with different metadata."""
         documents = [
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/cat1-doc1",
                 content="First document in category one with detailed content about topic A.",
                 metadata={"category": "cat1"},
             ),
-            DocumentInput(
+            IngestionRequest(
                 uri="doc://test/cat2-doc1",
                 content="First document in category two with detailed content about topic B.",
                 metadata={"category": "cat2"},
@@ -172,12 +172,12 @@ class TestRetrievalMetadata:
             min_chunk_size=10,
         )
         
-        await ingestion_service.ingest(documents, config)
+        await ingestion_service.run(documents, config)
     
     @pytest.mark.asyncio
     async def test_search_with_filter(
         self,
-        retrieval_service: RetrievalService,
+        retrieval_service: SearchService,
         indexed_with_metadata: None,
     ) -> None:
         """Test search with metadata filter."""

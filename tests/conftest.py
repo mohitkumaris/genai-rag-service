@@ -4,24 +4,18 @@ Test configuration and fixtures.
 
 import pytest
 
-from genai_rag_service.adapters.embedding.mock import MockEmbeddingProvider
-from genai_rag_service.adapters.vector.memory import InMemoryVectorStore
-from genai_rag_service.chunking.config import ChunkingConfig
-from genai_rag_service.chunking.fixed_size import FixedSizeChunker
-from genai_rag_service.config.settings import Settings
-from genai_rag_service.domain.embedding import EmbeddingConfig
-from genai_rag_service.services.ingestion import IngestionService
-from genai_rag_service.services.retrieval import RetrievalService
+from adapters.embeddings.mock import MockEmbeddingProvider
+from adapters.vector_store.memory import InMemoryVectorStore
+from rag.ingestion.chunker import ChunkingConfig, FixedSizeChunker
+from app.core.settings import settings as app_settings
+from rag.ingestion.pipeline import IngestionPipeline
+from rag.retrieval.search import SearchService
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings():
     """Create test settings."""
-    return Settings(
-        environment="development",
-        embedding_model_id="mock-large",
-        embedding_dimension=1536,
-    )
+    return app_settings
 
 
 @pytest.fixture
@@ -34,16 +28,6 @@ def vector_store() -> InMemoryVectorStore:
 def embedding_provider() -> MockEmbeddingProvider:
     """Create a mock embedding provider."""
     return MockEmbeddingProvider()
-
-
-@pytest.fixture
-def embedding_config() -> EmbeddingConfig:
-    """Create embedding configuration."""
-    return EmbeddingConfig(
-        model_id="mock-large",
-        dimension=1536,
-        batch_size=32,
-    )
 
 
 @pytest.fixture
@@ -67,13 +51,12 @@ def chunker(chunking_config: ChunkingConfig) -> FixedSizeChunker:
 def ingestion_service(
     vector_store: InMemoryVectorStore,
     embedding_provider: MockEmbeddingProvider,
-    embedding_config: EmbeddingConfig,
-) -> IngestionService:
-    """Create an ingestion service."""
-    return IngestionService(
+) -> IngestionPipeline:
+    """Create an ingestion pipeline."""
+    return IngestionPipeline(
         vector_store=vector_store,
         embedding_provider=embedding_provider,
-        embedding_config=embedding_config,
+        embedding_dimension=1536,
     )
 
 
@@ -81,13 +64,11 @@ def ingestion_service(
 def retrieval_service(
     vector_store: InMemoryVectorStore,
     embedding_provider: MockEmbeddingProvider,
-    embedding_config: EmbeddingConfig,
-) -> RetrievalService:
+) -> SearchService:
     """Create a retrieval service."""
-    return RetrievalService(
+    return SearchService(
         vector_store=vector_store,
         embedding_provider=embedding_provider,
-        embedding_config=embedding_config,
     )
 
 

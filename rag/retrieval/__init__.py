@@ -1,0 +1,3 @@
+"""
+Retrieval logic (search, ranking).
+"""
