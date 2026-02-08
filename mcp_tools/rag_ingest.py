@@ -56,7 +56,6 @@ class RagIngestHandler(ToolHandler):
 rag_ingest_tool = ToolDefinition(
     name="rag_ingest",
     description="Ingest documents into the RAG system with automatic chunking and embedding. Idempotent.",
-    permissions=["rag:ingest"],
     input_schema={
         "type": "object",
         "properties": {
@@ -82,5 +81,17 @@ rag_ingest_tool = ToolDefinition(
             }
         },
         "required": ["documents"]
-    }
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "ingested_count": {"type": "integer"},
+            "skipped_count": {"type": "integer"},
+            "chunk_count": {"type": "integer"},
+            "document_ids": {"type": "array", "items": {"type": "string"}},
+            "errors": {"type": "array"}
+        },
+        "required": ["ingested_count", "chunk_count", "document_ids"]
+    },
+    required_permissions=frozenset(["rag:ingest"])
 )

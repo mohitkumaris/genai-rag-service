@@ -5,7 +5,9 @@ description = "RAG service for GenAI platform"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "genai-mcp-core",
+    # NOTE: genai-mcp-core is an internal repo, NOT on PyPI
+    # In Docker: installed via local path (see Dockerfile.rag)
+    # For local dev: pip install -e ../genai-mcp-core
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",

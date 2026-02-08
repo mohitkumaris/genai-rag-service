@@ -50,7 +50,6 @@ class RagSearchHandler(ToolHandler):
 rag_search_tool = ToolDefinition(
     name="rag_search",
     description="Search for relevant context in the RAG knowledge base. Returns grounding context only.",
-    permissions=["rag:search"],
     input_schema={
         "type": "object",
         "properties": {
@@ -61,5 +60,16 @@ rag_search_tool = ToolDefinition(
             "similarity_threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0}
         },
         "required": ["query"]
-    }
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "results": {"type": "array"},
+            "count": {"type": "integer"},
+            "latency_ms": {"type": "number"},
+            "total_searched": {"type": "integer"}
+        },
+        "required": ["results", "count"]
+    },
+    required_permissions=frozenset(["rag:search"])
 )
